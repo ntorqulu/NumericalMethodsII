@@ -1,0 +1,135 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+#define N 100
+#define MAX_ITER 1000
+#define TOL 1e-8
+
+// Function prototypes
+void gerschgorin_bounds(double *a, double *b, double *c, int n, double *Sm, double *SM);
+double det_A_minus_lambda_I(double *a, double *b, double *c, int n, double lambda);
+void solve_A_minus_t_I_system(double *a, double *b, double *c, int n, double t, double *x, double *y, double *z);
+void shifted_inverse_power_iteration(double *a, double *b, double *c, int n, double t, double *x);
+
+double p(double x) {
+    return 3.0;
+}
+
+double q(double x) {
+    return 2.0;
+}
+
+double r(double x) {
+    return 1.0;
+}
+
+
+int main() {
+    double A[N+1][N+1], a[N+1], b[N], c[N], Sm, SM, lambda, x[N+1];
+    int n;
+    printf("Enter size of matrix (max %d): ", N);
+    scanf("%d", &n);
+    if (n > N) {
+        printf("Error: matrix too large\n");
+        exit(1);
+    }
+    printf("Enter matrix A (one row at a time):\n");
+    for (int i = 0; i <= n; i++) {
+        for (int j = 0; j <= n; j++) {
+            scanf("%lf", &A[i][j]);
+        }
+    }
+    for (int i = 0; i <= n; i++) {
+        a[i] = A[i][i];
+    }
+    for (int i = 0; i < n; i++) {
+        b[i] = A[i][i+1];
+        c[i] = A[i+1][i];
+    }
+    gerschgorin_bounds(a, b, c, n, &Sm, &SM);
+    printf("Gerschgorin bounds: [%.10f, %.10f]\n", Sm, SM);
+    printf("Enter value of shift (between %.10f and %.10f): ", Sm, SM);
+    scanf("%lf", &lambda);
+    shifted_inverse_power_iteration(a, b, c, n, lambda, x);
+    return 0;
+}
+
+void gerschgorin_bounds(double *a, double *b, double *c, int n, double *Sm, double *SM) {
+    double r;
+    *Sm = a[0] - fabs(b[0]) - fabs(c[0]);
+    *SM = a[0] + fabs(b[0]) + fabs(c[0]);
+    for (int i = 1; i < n; i++) {
+        r = fabs(b[i-1]) + fabs(c[i]);
+        if (a[i] - r < *Sm) {
+            *Sm = a[i] - r;
+        }
+        if (a[i] + r > *SM) {
+            *SM = a[i] + r;
+        }
+    }
+}
+
+double det_A_minus_lambda_I(double *a, double *b, double *c, int n, double lambda) {
+    double det = a[0] - lambda, u = b[0], v;
+    for (int i = 1; i < n; i++) {
+        v = u;
+        u = b[i-1];
+        det *= (a[i] - lambda) - u*v/(a[i-1] - lambda);
+        det -= (b[i]*b[i-1])/(a[i-1] - lambda);
+    }
+    det *= (a[n] - lambda) - u*v/(a[n-1] - lambda);
+    return det;
+}
+
+void solve_A_minus_t_I_system(double *a, double *b, double *c, int n, double t, double *x, double *y, double *z) {
+    double alpha, beta;
+    alpha = a[0] - t;
+    beta = b[0];
+    y[0] = 1.0/alpha;
+    z[0] = beta/alpha;
+    for (int i = 1; i < n; i++) {
+        alpha = a[i] - t - c[i-1]*beta/alpha;
+        y[i] = 1.0/alpha;
+        z[i] = (b[i] - c[i-1]*z[i-1])/alpha;
+    }
+    alpha = a[n] - t - c[n-1]*beta/alpha;
+    y[n] = 1.0/alpha;
+    z[n] = (b[n-1] - c[n-1]*z[n-1])/alpha;
+    x[n] = z[n];
+    for (int i = n-1; i >= 0; i--) {
+        x[i] = z[i] - c[i]*x[i+1]*y[i];
+    }
+}
+
+void shifted_inverse_power_iteration(double *a, double *b, double *c, int n, double t, double *x) {
+    double y[N+1], z[N+1], s, lambda = 0.0, mu;
+    int iter = 0;
+    for (int i = 0; i <= n; i++) {
+        x[i] = 1.0;
+    }
+    do {
+        iter++;
+        solve_A_minus_t_I_system(a, b, c, n, t, x, y, z);
+        s = fabs(z[0]);
+        for (int i = 1; i <= n; i++) {
+            if (fabs(z[i]) > s) {
+            s = fabs(z[i]);
+            }
+        }
+        for (int i = 0; i <= n; i++) {
+            x[i] = z[i] / s;
+        }
+        mu = 0.0;
+        for (int i = 0; i <= n; i++) {
+            mu += x[i] * y[i];
+        }
+        lambda = t + 1.0 / mu;
+    } while (fabs(lambda - t) > TOL && iter < MAX_ITER);
+        printf("Shifted inverse power iteration converged after %d iterations\n", iter);
+        printf("Approximate eigenvalue: %.10f\n", lambda);
+        printf("Approximate eigenvector:\n");
+        for (int i = 0; i <= n; i++) {
+            printf("%.10f\n", x[i]);
+        }
+}
